@@ -19,6 +19,7 @@ bool oldDeviceConnected = false;
 class ServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* pServer, esp_ble_gatts_cb_param_t* param) {
     deviceConnected = true;
+    printf("device connected esp32\n");
     pServer->updateConnParams(param->connect.remote_bda, 0x06, 0x12, 0, 2000);
   };
 

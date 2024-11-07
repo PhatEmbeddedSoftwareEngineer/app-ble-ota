@@ -67,7 +67,7 @@ const Ota: React.FC = () => {
     setLoadFile(false);
     setProgressBar(false);
   };
-
+  // crc16 
   function crc16(init: number, data: Uint8Array, len: number): number {
     let crc = init;
 
@@ -100,13 +100,9 @@ const Ota: React.FC = () => {
     });
   };
 
-  async function send_firmware(
-    packet_size: number,
-    file: ArrayBuffer,
-    deviceId: any
-  ) {
+  async function send_firmware(packet_size: number,file: ArrayBuffer,deviceId: any) {
     //self.start_time = time.time()
-	const startTime = new Date().getTime();
+	  const startTime = new Date().getTime();
     let index = 0;
     let written_size = 0;
     while (written_size < file.byteLength) {
@@ -123,16 +119,12 @@ const Ota: React.FC = () => {
         let to_read = packet_size - 3;
         if (sector_size + to_read > sector.byteLength) {
           to_read = sector.byteLength - sector_size;
-		  f_last = true;
+		      f_last = true;
         }
         let sector_data = sector.slice(sector_size, sector_size + to_read);
         sector_size = sector_size + to_read;
         if (sector_size >= 4096) f_last = true;
-        crc = crc16(
-          crc,
-          new Uint8Array(sector_data, 0, sector_data.byteLength),
-          sector_data.byteLength
-        );
+        crc = crc16(crc,new Uint8Array(sector_data, 0, sector_data.byteLength),sector_data.byteLength);
         if (f_last) sequence = 0xff;
         let packet = Buffer.alloc(to_read + 3);
         packet[0] = index & 0xff;
@@ -140,12 +132,11 @@ const Ota: React.FC = () => {
         packet[2] = sequence;
         Buffer.from(sector_data).copy(packet, 3);
         written_size = written_size + sector_data.byteLength;
-		//console.log(written_size);
-
+		    //console.log(written_size);
         if (f_last) {
-	      let p_status = Math.round((100 * written_size) / file.byteLength);
-		  setProgress(p_status);
-		  setUploadSpeed(written_size *1000 / 1024 / (new Date().getTime() - startTime));
+	        let p_status = Math.round((100 * written_size) / file.byteLength);
+		      setProgress(p_status);
+		      setUploadSpeed(written_size *1000 / 1024 / (new Date().getTime() - startTime));
           let crc_data = Buffer.alloc(2);
           crc_data[0] = crc & 0xff;
           crc_data[1] = (crc >> 8) & 0xff;
@@ -155,7 +146,7 @@ const Ota: React.FC = () => {
         //setfwStatus(0);
         fwStatus = 0;
         expected_index = index;
-		//console.log("Send " + index);
+		    //console.log("Send " + index);
         await BleClient.writeWithoutResponse(
           deviceId,
           "00008018-0000-1000-8000-00805f9b34fb",
@@ -165,8 +156,8 @@ const Ota: React.FC = () => {
         if (f_last && fwStatus == 0) {
           const fw_ack = await waitForAnsFw(5000);
           if (!fw_ack) {
-			setBarStatus("danger");
-			setShowStatus(true); 
+			      setBarStatus("danger");
+			      setShowStatus(true); 
             console.log("FW NACK");
             return;
           }
@@ -190,20 +181,20 @@ const Ota: React.FC = () => {
 		 // console.log("OK");
         } else if (fw_ans == 1 && expected_index == value.getUint16(0, true)) {
           fwStatus = 0;
-		  setStatus("CRC Error");
-		  console.log("CRC Error");
+          setStatus("CRC Error");
+          console.log("CRC Error");
           //TODO: crc error
         } else if (fw_ans == 2) {
           //&& (expected_index == value.getUint16(0,true))???
           fwStatus = 0;
-		  setStatus("Index Error");
-		  console.log("Index Error");
+          setStatus("Index Error");
+          console.log("Index Error");
           //TODO: sector index
           // bytes(4 ~ 5) indicates the desired Sector_Index
         } else if (fw_ans == 3 && expected_index == value.getUint16(0, true)) {
           fwStatus = 0;
-		  setStatus("Payload length Error");
-		  console.log("Payload length Error");
+          setStatus("Payload length Error");
+          console.log("Payload length Error");
           //TODO: Payload length error
         }
         //setfwStatus(1);
@@ -216,27 +207,29 @@ const Ota: React.FC = () => {
       let crc_recv = crc16(0, new Uint8Array(value.buffer, 0, 16), 18);
       if (crc_recv == crc) {
         if (value.getUint16(0, true) == 3) {
-          if (
-            value.getUint16(2, true) == 1 ||
-            value.getUint16(2, true) == 2 ||
-            value.getUint16(2, true) == 4
-          ) {
+          if (value.getUint16(2, true) == 1 || value.getUint16(2, true) == 2 || value.getUint16(2, true) == 4) {
             let ans = value.getUint16(4, true);
             if (ans == 0) {
               //ok
               //setcmdStatus(1);
               cmdStatus = 1;
               console.log(value);
-            } else if (ans == 1) {
-			  if(value.getUint16(2, true) == 1)
-			  	setStatus("NACK on START command");
-		      else if(value.getUint16(2, true) == 1)
-			  	setStatus("NACK on STOP command");
+            } 
+            else if (ans == 1) 
+            {
+              if(value.getUint16(2, true) == 1)
+              {
+                setStatus("NACK on START command");
+              }
+              else if(value.getUint16(2, true) == 1)
+              {
+                setStatus("NACK on STOP command");
+              }
               //not ok
               cmdStatus = 0;
               //setcmdStatus(0);
             } else if (ans == 3) {
-			  setStatus("Signature Error");
+			        setStatus("Signature Error");
               //signature error TODO
               //setcmdStatus(0);
               cmdStatus = 0;
@@ -250,11 +243,11 @@ const Ota: React.FC = () => {
   const ScanClick = async () => {
     console.log("Scan Clicked");
     if (isConnected) {
-		setConnection(false);
-		BleClient.disconnect(clientDevice.deviceId);
-	}
+      setConnection(false);
+      BleClient.disconnect(clientDevice.deviceId);
+    }
     try {
-	  setShowStatus(false);
+	    setShowStatus(false);
       setConnection(false);
       setLoadFile(false);
       setProgressBar(false);
@@ -287,7 +280,7 @@ const Ota: React.FC = () => {
           parseCommandNotification(value);
         }
       );
-
+      // Model Number String
       try {
         const response = await BleClient.read(
           clientDevice.deviceId,
@@ -301,6 +294,8 @@ const Ota: React.FC = () => {
         console.log("timeout 0x2a24");
         setModel("");
       }
+      // serial number string 
+
       try {
         const response = await BleClient.read(
           clientDevice.deviceId,
@@ -314,6 +309,8 @@ const Ota: React.FC = () => {
         console.log("timeout 0x2a25");
         setSerialNumber("");
       }
+      
+      // firmware version char 
       try {
         const response = await BleClient.read(
           clientDevice.deviceId,
@@ -327,6 +324,7 @@ const Ota: React.FC = () => {
         console.log("timeout 0x2a26");
         setSWVersion("");
       }
+      // HW_VERSION 
       try {
         const response = await BleClient.read(
           clientDevice.deviceId,
@@ -340,6 +338,7 @@ const Ota: React.FC = () => {
         console.log("timeout 0x2a27");
         setHWVersion("");
       }
+      // MANUFACTURER
       try {
         const response = await BleClient.read(
           clientDevice.deviceId,
@@ -353,6 +352,7 @@ const Ota: React.FC = () => {
         console.log("timeout 0x2a29");
         setManufacturer("");
       }
+
       //presentToast('middle', "Connected");
       setConnection(true);
     } catch (e) {
@@ -457,8 +457,8 @@ const Ota: React.FC = () => {
     let cmd_ack = await waitForAnsCommand(5000);
     if (!cmd_ack) {
       //TODO: nack error manage it
-	  setBarStatus("danger");
-	  setShowStatus(true); 
+	    setBarStatus("danger");
+	    setShowStatus(true); 
       console.log("NACK");
       return;
     }
@@ -466,36 +466,36 @@ const Ota: React.FC = () => {
     setProgress(0);
     setProgressBar(true);
     await send_firmware(510, otaFile, clientDevice.deviceId);
-	console.log("Stop OTA");
-	buffer.fill(0);
-	buffer[0] = 0x02;
-	buffer[1] = 0x00;
-	crc = crc16(0, buffer, 18);
-	buffer.writeUInt16LE(crc, 18);
-	console.log(buffer);
-	//setcmdStatus(0);
-	cmdStatus = 0;
-	await BleClient.write(
-	clientDevice.deviceId,
-	"00008018-0000-1000-8000-00805f9b34fb",
-	"00008022-0000-1000-8000-00805f9b34fb",
-	numbersToDataView(Array.prototype.slice.call(buffer))
-	);
-	cmd_ack = await waitForAnsCommand(5000);
-	if (!cmd_ack) {
-	//TODO: nack error manage it
-	setBarStatus("danger");
-	setShowStatus(true); 
-	console.log("NACK");
-	return;
-	}
+	  console.log("Stop OTA");
+	  buffer.fill(0);
+	  buffer[0] = 0x02;
+	  buffer[1] = 0x00;
+	  crc = crc16(0, buffer, 18);
+	  buffer.writeUInt16LE(crc, 18);
+	  console.log(buffer);
+	  //setcmdStatus(0);
+	  cmdStatus = 0;
+	  await BleClient.write(
+	    clientDevice.deviceId,
+	    "00008018-0000-1000-8000-00805f9b34fb",
+	    "00008022-0000-1000-8000-00805f9b34fb",
+	    numbersToDataView(Array.prototype.slice.call(buffer))
+	  );
+	  cmd_ack = await waitForAnsCommand(5000);
+	  if (!cmd_ack) {
+	    //TODO: nack error manage it
+	    setBarStatus("danger");
+	    setShowStatus(true); 
+	    console.log("NACK");
+	    return;
+	  }
     setotaType("undefined");
     setConnection(false);
     setProgressBar(false);
     setLoadFile(false);
-	setStatus("OTA Done");
-	setBarStatus("success");
-	setShowStatus(true);
+	  setStatus("OTA Done");
+	  setBarStatus("success");
+	  setShowStatus(true);
     BleClient.disconnect(clientDevice.deviceId);
   };
   const onFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
