@@ -7,6 +7,8 @@ import 'dart:typed_data'; // Để sử dụng Uint8List
 import 'package:fluttertoast/fluttertoast.dart';
 import 'upload.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart'; // Thư viện để chọn tệp
+
 void main() {
   runApp(
     ChangeNotifierProvider(
@@ -37,13 +39,12 @@ class BluetoothScreen extends StatefulWidget {
 }
 
 class _BluetoothScreenState extends State<BluetoothScreen> {
-  String model = '';  // Đây là trạng thái tương đương với `Model` trong React
-  bool disInfo = false;  // Đây là trạng thái tương đương với `DISInfo` trong React
   
   List<ScanResult> scanResults = [];
   late StreamSubscription scanSubscritpion;
   late StreamSubscription connectionSubscription;
-
+  
+  //late BluetoothCharacteristic commandCharacteristic;
   Timer? sendTimer;
   List<String> receivedData = [];
   Timer? displayTimer;
@@ -55,162 +56,6 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
     checkBluetooth();
     
   }
-  
-  int cmdStatus = 0;
-  void setStatus(String status) {
-    // Giả sử hàm này sẽ cập nhật trạng thái trong UI hoặc làm gì đó với giá trị status
-    // ignore: avoid_print
-    print(status);
-  }
-
-  void parseCommandNotification(ByteData value) {
-    if (value.lengthInBytes >= 20) {
-      // Lấy giá trị CRC từ byte 18 và 19
-      int crc = value.getUint16(18, Endian.little);
-      // Tính toán CRC nhận được từ các byte 0-15
-      int crc_recv = crc16(0, value.buffer.asUint8List(0, 16), 16);
-
-      if (crc_recv == crc) {
-        if (value.getUint16(0, Endian.little) == 3) {
-          int commandType = value.getUint16(2, Endian.little);
-          if (commandType == 1 || commandType == 2 || commandType == 4) {
-            int ans = value.getUint16(4, Endian.little);
-            if (ans == 0) {
-              // OK
-              cmdStatus = 1;
-              print(value); // In giá trị nếu cần thiết
-            } else if (ans == 1) {
-              if (commandType == 1) {
-                setStatus("NACK on START command");
-              } else if (commandType == 2) {
-                setStatus("NACK on STOP command");
-              }
-              cmdStatus = 0;
-            } else if (ans == 3) {
-              setStatus("Signature Error");
-              cmdStatus = 0;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  Future<bool> waitForAnsFw(int timeoutMillis) async {
-    // Kiểm tra điều kiện ban đầu
-    if (fwStatus == 1) {
-      return true;  // Nếu trạng thái firmware là 1, trả về true ngay lập tức
-    }
-
-    // Tạo một StreamController để kiểm tra điều kiện theo chu kỳ
-    final StreamController<bool> controller = StreamController<bool>();
-
-    // Kiểm tra điều kiện mỗi 50ms
-    Timer? intervalTimer;
-    intervalTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
-      if (fwStatus == 1) {
-        // Nếu điều kiện đã thỏa mãn (fwStatus == 1), dừng timer và trả về true
-        if (!controller.isClosed) {
-          controller.add(true);
-          controller.close();
-        }
-        intervalTimer?.cancel(); // Hủy timer
-      }
-    });
-
-    // Tạo một timer cho timeout
-    Timer timeoutTimer = Timer(Duration(milliseconds: timeoutMillis), () {
-      if (!controller.isClosed) {
-        controller.add(false); // Nếu hết thời gian, trả về false
-        controller.close();
-      }
-      intervalTimer?.cancel(); // Hủy timer kiểm tra
-    });
-
-    // Chờ kết quả từ StreamController (true hoặc false)
-    bool result = await controller.stream.first;
-
-    // Hủy timer timeout nếu đã hoàn tất
-    timeoutTimer.cancel();
-    
-    return result;
-  }
-
-  // Future<void> send_firmware(int packet_size, List<int> file, BluetoothDevice device) async {
-  //   final startTime = DateTime.now().millisecondsSinceEpoch;
-  //   int index = 0;
-  //   int written_size = 0;
-
-  //   // Khám phá các dịch vụ và lấy danh sách các đặc tính
-  //   List<BluetoothService> services = await device.discoverServices();
-  //   BluetoothCharacteristic? writeCharacteristic;
-
-  //   // Tìm đặc tính với UUID phù hợp
-  //   writeCharacteristic = services
-  //       .expand((service) => service.characteristics)
-  //       .firstWhere(
-  //         (char) => char.uuid.toString() == "00008020-0000-1000-8000-00805f9b34fb",
-  //         orElse: () => throw Exception('Không tìm thấy đặc tính!'),  // Ném ngoại lệ nếu không tìm thấy
-  //       );
-
-  //   while (written_size < file.length) {
-  //     int sector_size = 0;
-  //     int sequence = 0;
-  //     int crc = 0;
-  //     bool f_last = false;
-  //     List<int> sector = file.sublist(written_size, written_size + 4096 > file.length ? file.length : written_size + 4096);
-
-  //     if (sector.isEmpty) {
-  //       break;
-  //     }
-
-  //     while (sector_size < sector.length) {
-  //       int to_read = packet_size - 3;
-  //       if (sector_size + to_read > sector.length) {
-  //         to_read = sector.length - sector_size;
-  //         f_last = true;
-  //       }
-
-  //       List<int> sector_data = sector.sublist(sector_size, sector_size + to_read);
-  //       sector_size = sector_size + to_read;
-
-  //       if (sector_size >= 4096) f_last = true;
-  //       crc = crc16(crc, Uint8List.fromList(sector_data), sector_data.length);
-  //       if (f_last) sequence = 0xff;
-
-  //       List<int> packet = [index & 0xff, (index >> 8) & 0xff, sequence];
-  //       packet.addAll(sector_data);
-
-  //       written_size = written_size + sector_data.length;
-
-  //       if (f_last) {
-  //         int p_status = ((100 * written_size) / file.length).toInt();
-  //         setProgress(p_status);
-  //         setUploadSpeed(written_size * 1000 / 1024 / (DateTime.now().millisecondsSinceEpoch - startTime));
-
-  //         List<int> crc_data = [crc & 0xff, (crc >> 8) & 0xff];
-  //         packet.addAll(crc_data);
-  //       }
-
-  //       // Ghi gói dữ liệu vào đặc tính
-  //       await writeCharacteristic.write(Uint8List.fromList(packet));
-
-  //       if (f_last) {
-  //         bool fw_ack = await waitForAnsFw(5000);
-  //         if (!fw_ack) {
-  //           setBarStatus("danger");
-  //           setShowStatus(true);
-  //           print("Lỗi FW NACK");
-  //           return;
-  //         }
-  //       }
-
-  //       sequence++;
-  //       index++;
-  //     }
-  //   }
-  // }
-
   // Kiểm tra xem có kích thoạt bluetooth chưa 
   Future<void> checkBluetooth() async {
     if (await FlutterBluePlus.isSupported == false) {
@@ -249,7 +94,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
         }
       }
     });
-    // quét ble trong vòng 15 giấy 
+    // quét ble trong vòng 5 giấy 
     await FlutterBluePlus.startScan(timeout: const Duration(seconds: 5));
     // chờ cho đến khi quá trình quét ble được thực thi xong 
     await FlutterBluePlus.isScanning.where((val) => val == false).first;
@@ -267,52 +112,10 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
     // hủy đăng ký tránh việc rò rỉ bộ nhớ 
     scanSubscritpion.cancel();
   }
-  // CONVERT BINARY TO UTF
-  // Hàm chuyển đổi Uint8List (tương đương với ArrayBuffer) thành String
-  String ab2str(Uint8List buf) {
-    return utf8.decode(buf);
-  }
-  // CRC 
-  int crc16(int init, List<int> data, int len) {
-    int crc = init;
-    for (int i = 0; i < len; i++) {
-      crc ^= data[i] << 8;  // Dịch dữ liệu vào phần CRC
-
-      for (int j = 0; j < 8; j++) {
-        if (crc & 0x8000 != 0) {
-          crc = ((crc << 1) ^ 0x1021) & 0xFFFF;  // XOR với polynominal CRC-16
-        } else {
-          crc <<= 1;
-        }
-      }
-    }
-
-    return crc & 0xFFFF;  // Đảm bảo CRC luôn trong phạm vi 16 bit
-  }
-  // Hàm hiển thị toast trong Flutter
-  void presentToast(String position, String message) {
-    Fluttertoast.showToast(
-      msg: message,
-      toastLength: Toast.LENGTH_SHORT, // Độ dài của Toast (ngắn)
-      gravity: positionToGravity(position), // Vị trí của Toast
-    );
-  }
-
-  // Chuyển đổi vị trí thành Gravity của FlutterToast
-  ToastGravity positionToGravity(String position) {
-    switch (position) {
-      case 'top':
-        return ToastGravity.TOP;
-      case 'middle':
-        return ToastGravity.CENTER;
-      case 'bottom':
-      default:
-        return ToastGravity.BOTTOM;
-    }
-  }
+  
+  
   // ignore: non_constant_identifier_names
-  int expected_index = 0;
-  int fwStatus = 0;
+  
   // ignore: non_constant_identifier_names
   String model_number = '00002a24-0000-1000-8000-00805f9b34fb';
   // ignore: non_constant_identifier_names
@@ -337,9 +140,13 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
           // Lọc ra đặc tính cần nhận thông báo
           for (BluetoothCharacteristic characteristic in service.characteristics) {
             // ignore: avoid_print
+            
             print('Characteristic UUID: ${characteristic.uuid}');
             if (characteristic.uuid == Guid("00008020-0000-1000-8000-00805f9b34fb"))
             {
+              
+              commandCharacteristic  = characteristic;
+              print('commandCharacteristic: $commandCharacteristic');
               // ignore: avoid_print
               print('pass connect characteristic uuid');
               if (characteristic.properties.notify)
@@ -371,16 +178,25 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
           }
         }
       }
+      // ignore: use_build_context_synchronously
       await readModel(device,model_number,0,context);
+      // ignore: use_build_context_synchronously
       await readModel(device,serial_number,1,context);
+      // ignore: use_build_context_synchronously
       await readModel(device,firmwareVersion,2,context);
+      // ignore: use_build_context_synchronously
       await readModel(device, hw_version,3,context);
+      // ignore: use_build_context_synchronously
       await readModel(device, manufacturer,4,context);
     } catch (e) {
+      // ignore: avoid_print
       print('Error discovering services: $e');
     }
   }
-
+  // Hàm chuyển đổi Uint8List (tương đương với ArrayBuffer) thành String
+  String ab2str(Uint8List buf) {
+    return utf8.decode(buf);
+  }
   // ignore: non_constant_identifier_names
   Future<void> readModel(BluetoothDevice device,String MODEL,int number,BuildContext context) async {
     try {
@@ -417,6 +233,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
           // ignore: avoid_print
           print("Model: $model");
           // Cập nhật giá trị trong DeviceModel
+          // ignore: use_build_context_synchronously
           var deviceModel = Provider.of<DeviceModel>(context, listen: false);
           if(number == 0) {
             deviceModel.updateModelNumber(model);
@@ -453,7 +270,6 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
       setDis(false); // Đặt trạng thái disInfo thành false
     }
   }
-
   // Hàm giả lập cập nhật UI
   void setModel(String model) {
     // ignore: avoid_print
@@ -464,45 +280,6 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
     // ignore: avoid_print
     print("Dis info updated: $disInfo");
   }
-  void parseFirmwareNotification(List<int> valueList) {
-    // Chuyển List<int> thành ByteData
-    ByteData value = ByteData.sublistView(Uint8List.fromList(valueList));
-    // ignore: avoid_print
-    print('chieu dai cua value: ${value.lengthInBytes}');
-    if (value.lengthInBytes >= 20) {
-      // ignore: avoid_print
-      print("Đã vào đây");
-      // Lấy giá trị CRC từ byte 18-19
-      int crc = value.getUint16(18, Endian.little);
-      // Tính CRC từ 0 đến 16 byte (lấy 16 byte đầu tiên)
-      int crcRecv = crc16(0, value.buffer.asUint8List().sublist(0, 16), 18);
-      if (crcRecv == crc) {
-        // Lấy giá trị trả về từ byte 2-3
-        int fwAns = value.getUint16(2, Endian.little);
-        if (fwAns == 0 && expected_index == value.getUint16(0, Endian.little)) {
-          fwStatus = 1;
-          // ignore: avoid_print
-          print("OK");
-        } else if (fwAns == 1 && expected_index == value.getUint16(0, Endian.little)) {
-          fwStatus = 0;
-          setStatus("CRC Error");
-          // ignore: avoid_print
-          print("CRC Error");
-        } else if (fwAns == 2) {
-          fwStatus = 0;
-          setStatus("Index Error");
-          // ignore: avoid_print
-          print("Index Error");
-        } else if (fwAns == 3 && expected_index == value.getUint16(0, Endian.little)) {
-          fwStatus = 0;
-          setStatus("Payload length Error");
-          // ignore: avoid_print
-          print("Payload length Error");
-        }
-      }
-    }
-  }
-
   // function kết nối với thiết bị qua tên 
   Future<void> connectToDevice(BluetoothDevice device) async
   {
@@ -519,7 +296,6 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
           MaterialPageRoute(
               builder: (context) => const MyHomePage(
                     title: 'VERSION 1.0 ANDROID APP',
-                    
                   )),
         );
       });
