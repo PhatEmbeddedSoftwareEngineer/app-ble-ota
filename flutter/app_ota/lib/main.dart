@@ -9,6 +9,7 @@ import 'upload.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart'; // Thư viện để chọn tệp
 
+
 void main() {
   runApp(
     ChangeNotifierProvider(
@@ -37,7 +38,7 @@ class BluetoothScreen extends StatefulWidget {
   // ignore: library_private_types_in_public_api
   _BluetoothScreenState createState() => _BluetoothScreenState();
 }
-
+// BluetoothCharacteristic? commandCharacteristic;
 class _BluetoothScreenState extends State<BluetoothScreen> {
   
   List<ScanResult> scanResults = [];
@@ -91,6 +92,8 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
           // in ra các thiết bị bluetooth đã quét được 
           // ignore: avoid_print
           print('${result.device.remoteId}: "${result.advertisementData.advName}" found!');
+          // Lưu result.device vào biến toàn cục
+          selectedDevice = result.device;
         }
       }
     });
@@ -140,23 +143,24 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
           // Lọc ra đặc tính cần nhận thông báo
           for (BluetoothCharacteristic characteristic in service.characteristics) {
             // ignore: avoid_print
-            
             print('Characteristic UUID: ${characteristic.uuid}');
             if (characteristic.uuid == Guid("00008020-0000-1000-8000-00805f9b34fb"))
             {
-              
               commandCharacteristic  = characteristic;
               print('commandCharacteristic: $commandCharacteristic');
               // ignore: avoid_print
+              
               print('pass connect characteristic uuid');
               if (characteristic.properties.notify)
               {
+                
                 // ignore: avoid_print
                 print('Setting up notification for characteristic...');
                 await characteristic.setNotifyValue(true);
                 // ignore: deprecated_member_use
                 characteristic.value.listen((value) {
                   // ignore: avoid_print
+                  parseFirmwareNotification(value as ByteData);
                   print('value: $value');
                 });
               }
@@ -171,6 +175,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
                 characteristic.value.listen((value) {
                   // ignore: avoid_print
                   print('Received command notification: $value');
+                  
                   //parseCommandNotification(value);
                 });
               }
@@ -193,6 +198,8 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
       print('Error discovering services: $e');
     }
   }
+  // Hàm chính để gửi firmware
+
   // Hàm chuyển đổi Uint8List (tương đương với ArrayBuffer) thành String
   String ab2str(Uint8List buf) {
     return utf8.decode(buf);
@@ -288,7 +295,8 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
       // line connect to bluetooth 
       await device.connect(autoConnect: false);
       // ignore: avoid_print
-      print('Connected to ${device.remoteId}');
+      print('Connected to ${device.remoteId}');   
+      //print('Connected to ${connectedDevice!.advName}');   
       setState(() {
         connectedDevice = device;
         Navigator.push(
